@@ -1,70 +1,103 @@
-# IronVeil — Safe low-level memory tooling for Linux (5.x/6.x)
+# ============================================================================
+# IronVeil — Makefile (final)
+# Safe low-level memory & crypto tooling for Linux (5.x/6.x)
 # Module: ironveil.ko
+#
+# Usage:
+#   make                   # build module
+#   make load              # insmod ironveil.ko
+#   make unload            # rmmod ironveil
+#   make reload            # unload + load
+#   make install           # install into /lib/modules/... (then modprobe ironveil)
+#   make tools             # build user-space C tool (kpmctl)
+#   make clean             # clean build artifacts
+#
+# Knobs:
+#   DEBUG=1     -> extra logs, -DDEBUG, -O0
+#   STRICT=1    -> treat warnings as errors (-Werror)
+#   CLANG=1     -> use clang instead of gcc (if your kernel tree supports it)
+#   KDIR=...    -> kernel build dir (defaults to running kernel)
+#   INSTALL_MOD_DIR=extra -> destination under /lib/modules/$(uname -r)
+# ============================================================================
 
-# ====== User-tweakables =======================================================
-# KDIR: path to your kernel build tree
+# ---- Kernel tree ------------------------------------------------------------
 KDIR ?= /lib/modules/$(shell uname -r)/build
-# Build type: set DEBUG=1 for extra checks/logging
-DEBUG ?= 0
-# Where to install (modprobe path = /lib/modules/$(uname -r)/<INSTALL_MOD_DIR>)
+PWD  := $(shell pwd)
+
+# ---- Build knobs ------------------------------------------------------------
+DEBUG  ?= 0
+STRICT ?= 1
+CLANG  ?= 0
+
 INSTALL_MOD_DIR ?= extra
 
-# ====== Module wiring =========================================================
+# ---- Module objects ---------------------------------------------------------
 obj-m := ironveil.o
 
-# Split sources (we'll add these files step-by-step)
+# Keep sources grouped for clarity.
 ironveil-y := \
-  src/core.o \
-  src/ctl.o \
-  src/vtop.o \
-  src/phys.o \
-  src/policy.o \
-  src/crypto.o \
-  src/mmap.o \
-  src/netlink.o \
-  src/stats.o
+  src/core.o    \
+  src/ctl.o     \
+  src/vtop.o    \
+  src/phys.o    \
+  src/policy.o  \
+  src/crypto.o  \
+  src/stats.o   \
+  src/mmap.o    \
+  src/netlink.o
 
-# Headers
+# ---- Include path for our headers ------------------------------------------
 ccflags-y += -I$(PWD)/include
 
-# Warnings & hardening (keep it strict but practical for kernel)
-ccflags-y += -Wall -Wextra -Werror -Wformat=2 -Wcast-align \
-             -Wstrict-prototypes -Wmissing-prototypes \
+# ---- Warnings & hardening (practical + strict) ------------------------------
+# Kernel already sets many flags; we add a careful set here.
+ccflags-y += -Wall -Wextra -Wformat=2 -Wcast-align -Wundef \
+             -Wmissing-declarations -Wmissing-prototypes \
+             -Wshadow -Wpointer-arith -Wwrite-strings \
+             -Wvla -Wstrict-prototypes \
              -Wno-missing-field-initializers -Wno-unused-parameter
-# Kernel modules should not be PIE
+# Modules should not be PIE
 ccflags-y += -fno-pie
 
-# Optional: turn on DEBUG path
+ifeq ($(STRICT),1)
+  ccflags-y += -Werror
+endif
+
+# ---- Opt level / Debug ------------------------------------------------------
 ifeq ($(DEBUG),1)
   ccflags-y += -DDEBUG -O0
 else
   ccflags-y += -O2
 endif
 
-# ====== Version-aware knobs (light; main gating is done in kpm_compat.h) =====
-# Try to fetch kernelrelease from the tree; fallback to uname -r
-KV := $(shell $(MAKE) -sC $(KDIR) kernelrelease 2>/dev/null || uname -r)
-KMAJOR := $(word 1,$(subst ., ,$(KV)))
-KMINOR := $(word 2,$(subst ., ,$(KV)))
+# ---- Compiler switch (optional) --------------------------------------------
+ifeq ($(CLANG),1)
+  # Many kernel trees honor LLVM=1 for full clang+lld toolchain
+  # You can also pass LLVM=1 on the command line instead.
+  KMAKE_LLVM := LLVM=1
+endif
 
-# Provide a few gentle feature flags to help conditional paths in headers
-# (Most version checks happen in include/kpm_compat.h via linux/version.h)
+# ---- Light version-detection for conditional paths in headers ---------------
+KV      := $(shell $(MAKE) -sC $(KDIR) kernelrelease 2>/dev/null || uname -r)
+KMAJOR  := $(word 1,$(subst ., ,$(KV)))
+KMINOR  := $(word 2,$(subst ., ,$(KV)))
+
 ifeq ($(shell [ $(KMAJOR) -ge 6 ] && echo yes),yes)
   ccflags-y += -DIRONVEIL_KMAJOR_GE_6=1
 else
   ccflags-y += -DIRONVEIL_KMAJOR_LT_6=1
 endif
 
-# ====== Standard Kbuild targets ==============================================
-.PHONY: all modules clean clobber load unload reload install help
+# ---- Standard kbuild phony targets -----------------------------------------
+.PHONY: all modules clean clobber load unload reload install help tools
 
 all: modules
 
 modules:
-	$(MAKE) -C $(KDIR) M=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) $(KMAKE_LLVM) modules
 
 clean:
-	$(MAKE) -C $(KDIR) M=$(PWD) clean
+	$(MAKE) -C $(KDIR) M=$(PWD) $(KMAKE_LLVM) clean
 	@rm -rf \
 	  Module.symvers modules.order *.o *.ko *.mod *.mod.c .*.cmd \
 	  *~ core .tmp_versions \
@@ -74,33 +107,28 @@ clean:
 
 clobber: clean
 
-# ====== Convenience targets (dev workflow) ===================================
-# Load with insmod; if dependencies are needed, prefer modprobe.
+# ---- Convenience dev targets ------------------------------------------------
 load: modules
-	@sudo insmod ./ironveil.ko || (dmesg | tail -n 30; false)
+	@sudo insmod ./ironveil.ko || (dmesg | tail -n 50; false)
 
 unload:
-	@sudo rmmod ironveil || (dmesg | tail -n 30; false)
+	@sudo rmmod ironveil || (dmesg | tail -n 50; false)
 
 reload: unload load
 
-# Install into /lib/modules/<ver>/<INSTALL_MOD_DIR>/ironveil.ko
 install: modules
-	@$(MAKE) -C $(KDIR) M=$(PWD) modules_install INSTALL_MOD_DIR=$(INSTALL_MOD_DIR)
+	@$(MAKE) -C $(KDIR) M=$(PWD) $(KMAKE_LLVM) modules_install INSTALL_MOD_DIR=$(INSTALL_MOD_DIR)
 	@sudo depmod -a
-	@echo "Installed to $(INSTALL_MOD_DIR). You can 'modprobe ironveil'."
+	@echo "[IronVeil] Installed under '$(INSTALL_MOD_DIR)'. Run: sudo modprobe ironveil"
 
 help:
-	@echo "Targets:"
-	@echo "  all/modules   - build the module"
-	@echo "  clean/clobber - clean artifacts"
-	@echo "  load/unload   - insmod/rmmod locally (dev only)"
-	@echo "  reload        - rmmod then insmod"
-	@echo "  install       - modules_install + depmod (use modprobe later)"
-	@echo ""
-	@echo "Variables:"
-	@echo "  KDIR=<path to kernel build> (default: /lib/modules/\`uname -r\`/build)"
-	@echo "  DEBUG=1 to enable -DDEBUG and -O0"
-	@echo "  INSTALL_MOD_DIR=<dir under /lib/modules/...> (default: extra)"
-	@echo ""
-	@echo "Kernel release detected: $(KV) (major=$(KMAJOR) minor=$(KMINOR))"
+	@echo "IronVeil Makefile"
+	@echo "  targets: all/modules clean/clobber load/unload reload install tools help"
+	@echo "  vars:    DEBUG=$(DEBUG) STRICT=$(STRICT) CLANG=$(CLANG) KDIR=$(KDIR)"
+	@echo "  kernel:  detected $(KV) (major=$(KMAJOR) minor=$(KMINOR))"
+
+# ---- Build user-space C tool (kpmctl) --------------------------------------
+tools:
+	@mkdir -p tools/c
+	$(CC) -O2 -Wall -Wextra -o tools/c/kpmctl tools/c/kpmctl.c -Iinclude
+	@echo "[IronVeil] Built tools/c/kpmctl"
