@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * IronVeil — kpm.h
- * Internal kernel-private header (not installed for user-space)
+ * Internal kernel-private header (not for user-space installation)
  */
 
 #ifndef IRONVEIL_KPM_H
 #define IRONVEIL_KPM_H
 
+/* ===== Kernel includes ===== */
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -22,24 +23,24 @@
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 #include <linux/list.h>
-#include <linux/rculist.h>
 #include <linux/uaccess.h>
 #include <crypto/aead.h>
 
+/* ===== Project includes (public ABI first, then compat/policy) ===== */
 #include "kpm_abi.h"
 #include "kpm_compat.h"
 #include "kpm_policy.h"
 
 /* ===== Module metadata ===== */
-#define IV_MODNAME          "ironveil"
-#define IV_DRV_DESC         "IronVeil: safe low-level memory & crypto tooling"
-#define IV_AUTHOR           "You & ChatGPT (pair-programming)"
-#define IV_LICENSE          "GPL v2"
+#define IV_MODNAME   "ironveil"
+#define IV_DRV_DESC  "IronVeil: safe low-level memory & crypto tooling"
+#define IV_AUTHOR    "You & ChatGPT (pair-programming)"
+#define IV_LICENSE   "GPL v2"
 
 /* ===== Build-time limits (internal) ===== */
-#define IV_DEV_MINOR        MISC_DYNAMIC_MINOR
-#define IV_RING_MAX_ORDER   4      /* for optional mmap ring (16 pages max) */
-#define IV_STATS_RL_INTERVAL (HZ)  /* ratelimit interval for certain logs */
+#define IV_DEV_MINOR          MISC_DYNAMIC_MINOR
+#define IV_RING_MAX_ORDER     4           /* up to 16 pages for optional ring */
+#define IV_STATS_RL_INTERVAL  (HZ)        /* ratelimit interval for noisy logs */
 
 /* ===== Logging helpers ===== */
 #define iv_pr_info(fmt, ...)  pr_info(  IV_MODNAME ": " fmt, ##__VA_ARGS__)
@@ -47,10 +48,10 @@
 #define iv_pr_err(fmt, ...)   pr_err(   IV_MODNAME ": " fmt, ##__VA_ARGS__)
 #define iv_pr_dbg(fmt, ...)   pr_debug( IV_MODNAME ": " fmt, ##__VA_ARGS__)
 
-#define iv_rl_err(fmt, ...)   do {                           \
-    static DEFINE_RATELIMIT_STATE(_rs, IV_STATS_RL_INTERVAL, 8); \
-    if (__ratelimit(&_rs))                                    \
-        iv_pr_err(fmt, ##__VA_ARGS__);                        \
+#define iv_rl_err(fmt, ...)   do {                                   \
+    static DEFINE_RATELIMIT_STATE(_rs, IV_STATS_RL_INTERVAL, 8);     \
+    if (__ratelimit(&_rs))                                           \
+        iv_pr_err(fmt, ##__VA_ARGS__);                                \
 } while (0)
 
 /* ===== Forward decls ===== */
@@ -73,9 +74,9 @@ struct iv_counters {
 };
 
 struct iv_stats_state {
-    /* per-cpu could be added later; for simplicity start global + lock */
+    /* could be per-cpu later; start global + spinlock */
     struct iv_counters global;
-    spinlock_t         lock;     /* protects global counters */
+    spinlock_t         lock;
 };
 
 /* ===== Crypto state ===== */
@@ -85,37 +86,34 @@ enum iv_key_state {
 };
 
 struct iv_crypto_state {
-    struct crypto_aead *aead;    /* GCM(aes) */
+    struct crypto_aead *aead;    /* gcm(aes) */
     enum iv_key_state   state;
     u32                 key_bytes;   /* 16 or 32 */
-    /* Optional: key lifetime stats, nonce strategy, etc. */
     spinlock_t          lock;        /* protects aead/key state */
 };
 
 /* ===== Access policy (ranges, caps, etc.) ===== */
 struct iv_policy {
-    /* Implemented in policy.c */
     struct mutex  lock;
-    /* example: whitelist of physical ranges that are allowed */
-    /* struct list_head ranges; */
-    u32           default_flags;  /* IV_ACC_READ/IV_ACC_WRITE mask */
+    u32           default_flags;     /* IV_ACC_READ/IV_ACC_WRITE mask */
     bool          require_cap_rawio; /* typically true */
+    /* future: whitelist ranges list_head, etc. */
 };
 
 /* ===== Device state ===== */
 struct iv_dev {
-    struct miscdevice  miscdev;
+    struct miscdevice    miscdev;
     struct iv_stats_state stats;
     struct iv_crypto_state crypto;
-    struct iv_policy   policy;
+    struct iv_policy     policy;
 
     /* Optional buffers / rings for mmap path */
-    void              *ring_virt;
-    size_t             ring_len;
-    spinlock_t         ring_lock;
+    void                *ring_virt;
+    size_t               ring_len;
+    spinlock_t           ring_lock;
 
-    /* For future async/eventing (netlink etc.) */
-    /* struct iv_nl *nl; */
+    /* Optional: netlink state holder (if you add per-instance state later) */
+    /* void *nl; */
 };
 
 /* ===== Global accessor ===== */
@@ -147,9 +145,7 @@ static inline void iv_stats_set_last_err(long err, struct iv_stats_state *st)
 /* ===== Capability gating ===== */
 static inline bool iv_check_caller_caps(void)
 {
-    if (!iv_has_rawio_cap())
-        return false;
-    return true;
+    return iv_has_rawio_cap();
 }
 
 /* ===== Policy interface (policy.c) ===== */
@@ -182,7 +178,8 @@ void iv_crypto_fini(struct iv_crypto_state *cs);
 int  iv_crypto_set_key(struct iv_crypto_state *cs, u32 algo,
                        const u8 *key, u32 key_bytes);
 int  iv_crypto_clear_key(struct iv_crypto_state *cs, u32 algo);
-int  iv_crypto_process(struct iv_crypto_state *cs, const struct iv_crypto_req __user *ureq,
+int  iv_crypto_process(struct iv_crypto_state *cs,
+                       const struct iv_crypto_req __user *ureq,
                        bool encrypt);
 
 /* ===== Stats glue (stats.c) ===== */
@@ -196,8 +193,8 @@ void iv_mmap_fini(struct iv_dev *iv);
 int  iv_mmap_file(struct file *filp, struct vm_area_struct *vma);
 
 /* ===== Optional netlink (netlink.c) ===== */
-/* int iv_nl_init(struct iv_dev *iv); */
-/* void iv_nl_fini(struct iv_dev *iv); */
+int  iv_nl_init(struct iv_dev *iv);
+void iv_nl_fini(struct iv_dev *iv);
 
 /* ===== File operations (exposed by core.c) ===== */
 extern const struct file_operations ironveil_fops;
