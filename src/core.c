@@ -2,9 +2,14 @@
 /*
  * IronVeil — core.c
  * Module init/exit, miscdevice registration, file ops, global state
+ * Features enabled: mmap ring + Generic Netlink (optional, non-fatal on error)
  */
 
 #include "kpm.h"
+
+/* If kpm.h still has netlink prototypes commented, keep these externs: */
+extern int  iv_nl_init(struct iv_dev *iv);
+extern void iv_nl_fini(struct iv_dev *iv);
 
 static struct iv_dev g_iv;            /* single-device instance */
 static struct iv_dev *g_iv_ptr = &g_iv;
@@ -26,7 +31,6 @@ static int ironveil_open(struct inode *ino, struct file *filp)
 
     filp->private_data = iv;
 
-    /* Enforce non-seekable semantics */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,1,0)
     nonseekable_open(ino, filp);
 #endif
@@ -48,7 +52,6 @@ static long ironveil_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigne
 
     if (!iv) return -ENODEV;
 
-    /* Stats: total ioctl count (best-effort; light locking inside helpers) */
     iv_stats_inc(&iv->stats.global.ops_ioctl, &iv->stats);
 
     ret = iv_ioctl_dispatch(filp, cmd, arg);
@@ -61,7 +64,6 @@ static long ironveil_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigne
 #if IV_HAVE_COMPAT_IOCTL
 static long ironveil_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-    /* For now we route to same dispatcher; structures are packed/fixed-width */
     return ironveil_unlocked_ioctl(filp, cmd, arg);
 }
 #endif
@@ -74,6 +76,7 @@ const struct file_operations ironveil_fops = {
 #if IV_HAVE_COMPAT_IOCTL
     .compat_ioctl   = ironveil_compat_ioctl,
 #endif
+    .mmap           = iv_mmap_file,     /* << enabled mmap ring */
     .llseek         = no_llseek,
 };
 
@@ -100,27 +103,44 @@ int iv_core_init(struct iv_dev *iv)
         goto err_crypto;
     }
 
-    /* Optional ring buffer (disabled until mmap.c arrives) */
+    /* Init ring (optional but enabled). Failure is non-fatal: we keep ioctl paths usable. */
     iv->ring_virt = NULL;
     iv->ring_len  = 0;
     spin_lock_init(&iv->ring_lock);
+
+    ret = iv_mmap_init(iv);
+    if (ret) {
+        iv_pr_warn("mmap ring init failed: %d (continuing without mmap)\n", ret);
+        /* do not goto error; leave ring_virt NULL and ring_len 0 */
+    }
 
     /* Register misc device */
     iv->miscdev.minor = IV_DEV_MINOR;
     iv->miscdev.name  = IV_DEV_NAME;
     iv->miscdev.fops  = &ironveil_fops;
-    iv->miscdev.mode  = 0; /* permissions controlled via caps/policy */
+    iv->miscdev.mode  = 0;
 
     ret = misc_register(&iv->miscdev);
     if (ret) {
         iv_pr_err("misc_register failed: %d\n", ret);
-        goto err_policy;
+        goto err_maybe_ring;
     }
 
-    iv_pr_info("initialized (ABI %u.%u)\n", IV_ABI_VERSION_MAJOR, IV_ABI_VERSION_MINOR);
+    /* Init Generic Netlink (optional). Non-fatal on error. */
+    ret = iv_nl_init(iv);
+    if (ret) {
+        iv_pr_warn("netlink init failed: %d (continuing without netlink)\n", ret);
+        /* continue */
+    }
+
+    iv_pr_info("initialized (ABI %u.%u)%s%s\n",
+               IV_ABI_VERSION_MAJOR, IV_ABI_VERSION_MINOR,
+               iv->ring_virt ? " [mmap]" : "",
+               ret ? "" : " [netlink]");
     return 0;
 
-err_policy:
+err_maybe_ring:
+    iv_mmap_fini(iv);
     iv_policy_fini(&iv->policy);
 err_crypto:
     iv_crypto_fini(&iv->crypto);
@@ -131,7 +151,14 @@ err_stats:
 
 void iv_core_fini(struct iv_dev *iv)
 {
+    /* De-register device first to stop new opens/ioctls */
     misc_deregister(&iv->miscdev);
+
+    /* Tear down optional subsystems */
+    iv_nl_fini(iv);
+    iv_mmap_fini(iv);
+
+    /* Core components */
     iv_policy_fini(&iv->policy);
     iv_crypto_fini(&iv->crypto);
     iv_stats_fini(&iv->stats);
