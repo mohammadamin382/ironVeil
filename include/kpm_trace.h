@@ -9,6 +9,7 @@
  *  - Easy upgrade path to real tracepoints if needed.
  */
 
+//TODO : write trace.c and complete kpm_trace.h
 #ifndef IRONVEIL_KPM_TRACE_H
 #define IRONVEIL_KPM_TRACE_H
 
