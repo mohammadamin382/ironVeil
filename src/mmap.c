@@ -9,7 +9,7 @@
  *  - Mapping uses remap_vmalloc_range(); size must be page-aligned.
  */
 
-#include "kpm.h"
+#include "../include/kpm.h"
 
 #define IV_RING_PAGES_MIN   4u
 #define IV_RING_PAGES_MAX   (1u << IV_RING_MAX_ORDER) /* from kpm.h */
