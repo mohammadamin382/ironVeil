@@ -4,8 +4,8 @@
  * Counters/telemetry export for IV_IOC_GET_STATS
  */
 
-#include "kpm.h"
-#include "kpm_trace.h"
+#include "../include/kpm.h"
+#include "../include/kpm_trace.h"
 
 void iv_stats_init(struct iv_stats_state *st)
 {
