@@ -47,7 +47,7 @@ ironveil-y := \
   src/netlink.o
 
 # ---- Include path for our headers ------------------------------------------
-subdir-ccflags-y += -I$(PWD)/include
+ccflags-y += -I$(PWD)/include
 # ---- Warnings & hardening (practical + strict) ------------------------------
 # Kernel already sets many flags; we add a careful set here.
 ccflags-y += -Wall -Wextra -Wformat=2 -Wcast-align -Wundef \
