@@ -4,7 +4,7 @@
  * AES-GCM via kernel AEAD API (sync path with completion fallback)
  */
 
-#include "kpm.h"
+#include "../include/kpm.h"
 #include <linux/completion.h>
 #include <linux/scatterlist.h>
 #include <linux/errno.h>
