@@ -4,7 +4,7 @@
  * User VA -> first PA translation (with proper pin/unpin and bounds)
  */
 
-#include "kpm.h"
+#include "../include/kpm.h"
 
 int iv_user_va2pa_first(unsigned long uaddr, size_t len, bool writable,
                         phys_addr_t *out_pa, size_t *out_covered)
