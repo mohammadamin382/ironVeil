@@ -50,9 +50,11 @@ ironveil-y := \
 # Kernel already sets many flags; we add a careful set here.
 ccflags-y += -Wall -Wextra -Wformat=2 -Wcast-align -Wundef \
              -Wmissing-declarations -Wmissing-prototypes \
-             -Wshadow -Wpointer-arith -Wwrite-strings \
+             -Wshadow -Wwrite-strings \
              -Wvla -Wstrict-prototypes \
              -Wno-missing-field-initializers -Wno-unused-parameter
+# Kernel headers legitimately do void* arithmeti
+ccflags-y += -Wno-pointer-arith -Wno-error=pointer-arith
 # Modules should not be PIE
 ccflags-y += -fno-pie
 
