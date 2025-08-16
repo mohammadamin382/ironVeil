@@ -4,7 +4,7 @@
  * Access policy for physical memory operations
  */
 
-#include "kpm.h"
+#include "../include/kpm.h"
 
 static inline bool iv_phys_range_ok(phys_addr_t start, size_t len)
 {
