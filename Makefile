@@ -1,5 +1,5 @@
 # ============================================================================
-# IronVeil — Makefile (final)
+# IronVeil — Makefile (final, patched)
 # Safe low-level memory & crypto tooling for Linux (5.x/6.x)
 # Module: ironveil.ko
 #
@@ -34,7 +34,6 @@ INSTALL_MOD_DIR ?= extra
 # ---- Module objects ---------------------------------------------------------
 obj-m := ironveil.o
 
-# Keep sources grouped for clarity.
 ironveil-y := \
   src/core.o    \
   src/ctl.o     \
@@ -46,15 +45,19 @@ ironveil-y := \
   src/mmap.o    \
   src/netlink.o
 
-# ---- Warnings & hardening (practical + strict) ------------------------------
-# Kernel already sets many flags; we add a careful set here.
+# ---- Include path for our headers (apply broadly) ---------------------------
+ccflags-y           += -I$(PWD)/include
+subdir-ccflags-y    += -I$(PWD)/include
+
+# ---- Warnings & hardening ---------------------------------------------------
 ccflags-y += -Wall -Wextra -Wformat=2 -Wcast-align -Wundef \
              -Wmissing-declarations -Wmissing-prototypes \
-             -Wshadow -Wwrite-strings \
-             -Wvla -Wstrict-prototypes \
+             -Wshadow -Wwrite-strings -Wvla -Wstrict-prototypes \
              -Wno-missing-field-initializers -Wno-unused-parameter
-# Kernel headers legitimately do void* arithmeti
+
+# Kernel headers do legit void* arithmetic; never fail build on it.
 ccflags-y += -Wno-pointer-arith -Wno-error=pointer-arith
+
 # Modules should not be PIE
 ccflags-y += -fno-pie
 
@@ -71,8 +74,6 @@ endif
 
 # ---- Compiler switch (optional) --------------------------------------------
 ifeq ($(CLANG),1)
-  # Many kernel trees honor LLVM=1 for full clang+lld toolchain
-  # You can also pass LLVM=1 on the command line instead.
   KMAKE_LLVM := LLVM=1
 endif
 
