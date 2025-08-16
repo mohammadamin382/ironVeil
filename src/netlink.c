@@ -4,7 +4,7 @@
  * Optional Generic Netlink interface (async-friendly control/events)
  */
 
-#include "kpm.h"
+#include "../include/kpm.h"
 #include <net/genetlink.h>
 
 #define IV_NL_FAMILY_NAME   "IRONVEIL"
