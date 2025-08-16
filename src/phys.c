@@ -4,7 +4,7 @@
  * Safe physical memory I/O via memremap()/memunmap() and bounce buffer
  */
 
-#include "kpm.h"
+#include "../include/kpm.h"
 
 #define IV_WINDOW_MAX   (1UL << 20)  /* map up to 1 MiB per window */
 #define IV_BOUNCE_MAX   (64UL << 10) /* 64 KiB per copy chunk to/from user */
