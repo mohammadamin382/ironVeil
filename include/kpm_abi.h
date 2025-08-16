@@ -6,7 +6,18 @@
 
 #ifndef IRONVEIL_KPM_API_H
 #define IRONVEIL_KPM_API_H
-
+/* File-scope safe static assert for 5.x/6.x kernels */
+#ifndef IV_STATIC_ASSERT
+# define __IV_GLUE2(a,b) a##b
+# define __IV_GLUE(a,b)  __IV_GLUE2(a,b)
+# if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+   /* Kernel toolchain on 5.15 typically supports _Static_assert via gnu11 */
+#  define IV_STATIC_ASSERT(cond) _Static_assert((cond), "IV static assert failed: " #cond)
+# else
+   /* Fallback: typedef trick with unique name */
+#  define IV_STATIC_ASSERT(cond) typedef char __IV_GLUE(__iv_static_assert_, __COUNTER__)[(cond) ? 1 : -1]
+# endif
+#endif
 /* ---------- Type plumbing: kernel vs user ---------- */
 #ifdef __KERNEL__
 #  include <linux/types.h>
@@ -182,7 +193,6 @@ struct iv_ping {
 /* Optional compile-time size guards (user-space can mimic with _Static_assert) */
 #ifdef __KERNEL__
 #  include <linux/build_bug.h>
-#  define IV_STATIC_ASSERT(c) BUILD_BUG_ON(!(c))
 #else
 #  if !defined(static_assert)
 #    define IV_STATIC_ASSERT(c) _Static_assert((c), "IV static assert failed")
