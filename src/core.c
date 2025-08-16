@@ -5,7 +5,7 @@
  * Features enabled: mmap ring + Generic Netlink (optional, non-fatal on error)
  */
 
-#include "kpm.h"
+#include "../include/kpm.h"
 
 /* If kpm.h still has netlink prototypes commented, keep these externs: */
 extern int  iv_nl_init(struct iv_dev *iv);
