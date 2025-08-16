@@ -4,7 +4,7 @@
  * ioctl dispatcher: validation, ABI versioning, safe user copies, routing
  */
 
-#include "kpm.h"
+#include "../include/kpm.h"
 
 #define IV_CHECK_ABI(hdrp) \
     ((hdrp)->abi_major == IV_ABI_VERSION_MAJOR)
