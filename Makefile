@@ -20,7 +20,6 @@
 #   INSTALL_MOD_DIR=extra -> destination under /lib/modules/$(uname -r)
 # ============================================================================
 
-ccflags-y += -I$(PWD)/include
 # ---- Kernel tree ------------------------------------------------------------
 KDIR ?= /lib/modules/$(shell uname -r)/build
 PWD  := $(shell pwd)
@@ -32,6 +31,7 @@ CLANG  ?= 0
 
 INSTALL_MOD_DIR ?= extra
 
+ccflags-y += -I$(PWD)/include
 # ---- Module objects ---------------------------------------------------------
 obj-m := ironveil.o
 
