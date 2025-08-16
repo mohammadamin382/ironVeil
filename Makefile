@@ -31,7 +31,6 @@ CLANG  ?= 0
 
 INSTALL_MOD_DIR ?= extra
 
-ccflags-y += -I$(PWD)/include
 # ---- Module objects ---------------------------------------------------------
 obj-m := ironveil.o
 
@@ -46,8 +45,6 @@ ironveil-y := \
   src/stats.o   \
   src/mmap.o    \
   src/netlink.o
-
-# ---- Include path for our headers ------------------------------------------
 
 # ---- Warnings & hardening (practical + strict) ------------------------------
 # Kernel already sets many flags; we add a careful set here.
