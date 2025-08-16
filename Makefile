@@ -20,6 +20,7 @@
 #   INSTALL_MOD_DIR=extra -> destination under /lib/modules/$(uname -r)
 # ============================================================================
 
+ccflags-y += -I$(PWD)/include
 # ---- Kernel tree ------------------------------------------------------------
 KDIR ?= /lib/modules/$(shell uname -r)/build
 PWD  := $(shell pwd)
@@ -47,7 +48,7 @@ ironveil-y := \
   src/netlink.o
 
 # ---- Include path for our headers ------------------------------------------
-ccflags-y += -I$(PWD)/include
+
 # ---- Warnings & hardening (practical + strict) ------------------------------
 # Kernel already sets many flags; we add a careful set here.
 ccflags-y += -Wall -Wextra -Wformat=2 -Wcast-align -Wundef \
